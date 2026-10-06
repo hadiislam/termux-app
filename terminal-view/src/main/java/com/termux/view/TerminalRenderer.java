@@ -132,7 +132,13 @@ public final class TerminalRenderer {
                 // If this is detected, we draw this code point scaled to match what wcwidth() expects.
                 final float measuredCodePointWidth = (codePoint < asciiMeasures.length) ? asciiMeasures[codePoint] : mTextPaint.measureText(line,
                     currentCharIndex, charsForCodePoint);
-                final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
+                final boolean isBengali = Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.BENGALI;
+                // Bengali cluster-এর native shaping নষ্ট না করতে per-code-point measurement এড়ানো।
+                final float measuredWidth = isBengali
+                    ? mFontWidth * codePointWcWidth
+                    : measuredCodePointWidth;
+                final boolean fontWidthMismatch = !isBengali &&
+                    Math.abs(measuredWidth / mFontWidth - codePointWcWidth) > 0.01;
 
                 if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch) {
                     if (column == 0 || column == lastRunStartColumn) {
@@ -212,9 +218,19 @@ public final class TerminalRenderer {
         float left = startColumn * mFontWidth;
         float right = left + runWidthColumns * mFontWidth;
 
+        boolean containsBengali = false;
+        for (int i = startCharIndex; i < startCharIndex + runWidthChars;) {
+            int codePoint = Character.codePointAt(text, i, startCharIndex + runWidthChars);
+            if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.BENGALI) {
+                containsBengali = true;
+                break;
+            }
+            i += Character.charCount(codePoint);
+        }
+
         mes = mes / mFontWidth;
         boolean savedMatrix = false;
-        if (Math.abs(mes - runWidthColumns) > 0.01) {
+        if (!containsBengali && Math.abs(mes - runWidthColumns) > 0.01) {
             canvas.save();
             canvas.scale(runWidthColumns / mes, 1.f);
             left *= mes / runWidthColumns;
